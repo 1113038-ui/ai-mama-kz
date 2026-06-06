@@ -1,31 +1,33 @@
-import { NavLink } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 
-const navItems = [
-  { to: '/dashboard', icon: '🏠', label: 'Дашборд' },
-  { to: '/medcard', icon: '📋', label: 'Карта' },
-  { to: '/tracker', icon: '💊', label: 'Лекарства' },
-  { to: '/benefits', icon: '💰', label: 'Выплаты' },
+const tabs = [
+  { path: '/dashboard', icon: '🏠', label: 'Главная' },
+  { path: '/medcard',   icon: '📋', label: 'Карта' },
+  { path: '/tracker',   icon: '💊', label: 'Лекарства' },
+  { path: '/benefits',  icon: '💰', label: 'Выплаты' },
 ]
 
 export default function BottomNav() {
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-pb">
-      <div className="flex max-w-lg mx-auto">
-        {navItems.map(item => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) =>
-              `flex-1 flex flex-col items-center py-2 text-xs font-medium transition-colors ${
-                isActive ? 'text-primary-500' : 'text-gray-400 hover:text-gray-600'
-              }`
-            }
-          >
-            <span className="text-xl mb-0.5">{item.icon}</span>
-            {item.label}
-          </NavLink>
-        ))}
+    <div className="fixed bottom-0 left-0 right-0 z-40 px-4 pb-5">
+      <div className="glass rounded-3xl max-w-lg mx-auto px-3 py-2.5 flex items-center justify-around"
+        style={{ boxShadow: '0 8px 40px -8px rgba(124, 58, 237, 0.3)' }}>
+        {tabs.map(t => {
+          const active = pathname === t.path
+          return (
+            <button key={t.path} onClick={() => navigate(t.path)}
+              className={`nav-item ${active ? 'active' : ''}`}>
+              <span className="text-xl leading-none">{t.icon}</span>
+              <span className={`text-[10px] font-bold mt-0.5 ${active ? 'text-white' : 'text-primary-400'}`}>
+                {t.label}
+              </span>
+            </button>
+          )
+        })}
       </div>
-    </nav>
+    </div>
   )
 }
