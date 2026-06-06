@@ -1,8 +1,16 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { createWorker } from 'tesseract.js'
-import { getDocuments, setDocuments, getAnalyses, setAnalyses } from '../utils/storage'
+import { getAnalyses, setAnalyses } from '../utils/storage'
+import { saveFile, getFilesByCategory, deleteFile } from '../utils/fileStorage'
+import FileViewer from './FileViewer'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' Б'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' КБ'
+  return (bytes / 1024 / 1024).toFixed(1) + ' МБ'
+}
 
 async function resizeImage(source, maxSize = 200) {
   return new Promise(resolve => {
@@ -35,23 +43,17 @@ async function pdfToCanvas(arrayBuffer) {
 
 function extractAnalysisData(ocrText) {
   const text = ocrText || ''
-  const lower = text.toLowerCase()
-
-  // Detect type
   const isUzi = /узи|ультразвук|бпр|дб|чсс|плацент/i.test(text)
   const type = isUzi ? 'УЗИ' : 'Анализ'
-
   const rows = []
 
   if (isUzi) {
-    // УЗИ patterns: "БПР 45 мм", "ДБ 32 мм", "ЧСС 150 уд/мин"
     const uziRe = /([А-ЯЁA-Z]{2,6})\s+([\d.,]+)\s*(мм|см|уд\/мин|нед|дней)?/gi
     let m
     while ((m = uziRe.exec(text)) !== null) {
       rows.push({ parameter: m[1], value: m[2], unit: m[3] || '', norm: '' })
     }
   } else {
-    // Analysis patterns: "Гемоглобин 120 г/л", "Глюкоза 4.5 ммоль/л"
     const analysisRe =
       /([А-ЯЁа-яёa-zA-Z][А-ЯЁа-яё\w\s-]{2,25})\s+([\d.,]+)\s*(г\/л|ммоль\/л|\*10\^9|мкмоль\/л|%|мг\/л|МЕ\/л|мкг\/л|ед\/л)?/gi
     let m
@@ -66,12 +68,19 @@ function extractAnalysisData(ocrText) {
   return { type, rows: rows.slice(0, 20) }
 }
 
+const typeColor = {
+  'Анализ': 'bg-violet-100 text-violet-700',
+  'УЗИ': 'bg-blue-100 text-blue-700',
+  'Документ': 'bg-gray-100 text-gray-600'
+}
+
 // ─── main component ──────────────────────────────────────────────────────────
 
 export default function DocumentUpload() {
-  const [documents, setDocumentsState] = useState(getDocuments())
+  const [documents, setDocumentsState] = useState([])
   const [dragging, setDragging] = useState(false)
-  const [ocrState, setOcrState] = useState(null) // null | 'loading' | 'done'
+  const [currentFile, setCurrentFile] = useState(null) // { file, thumbnail }
+  const [ocrState, setOcrState] = useState(null) // null | 'loading' | 'done' | 'error'
   const [ocrProgress, setOcrProgress] = useState(0)
   const [ocrText, setOcrText] = useState('')
   const [thumbnail, setThumbnail] = useState(null)
@@ -81,28 +90,54 @@ export default function DocumentUpload() {
   const [viewDoc, setViewDoc] = useState(null)
   const fileRef = useRef()
 
+  // Load documents from IndexedDB on mount
+  useEffect(() => {
+    getFilesByCategory('document').then(files => {
+      setDocumentsState(files.sort((a, b) => b.uploadedAt - a.uploadedAt))
+    })
+  }, [])
+
+  const reloadDocs = () => {
+    getFilesByCategory('document').then(files => {
+      setDocumentsState(files.sort((a, b) => b.uploadedAt - a.uploadedAt))
+    })
+  }
+
   const handleFile = useCallback(async (file) => {
     if (!file) return
-    setOcrState('loading')
-    setOcrProgress(0)
+    setCurrentFile(file)
     setOcrText('')
     setThumbnail(null)
     setExtracted(null)
+    setOcrState(null)
 
-    let imageSource = file
     let thumb = null
-
     try {
       if (file.type === 'application/pdf') {
         const buf = await file.arrayBuffer()
         const canvas = await pdfToCanvas(buf)
         thumb = await resizeImage(canvas.toDataURL('image/jpeg', 0.9))
-        // Convert canvas to blob for Tesseract
-        imageSource = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9))
       } else {
         thumb = await resizeImage(file)
       }
       setThumbnail(thumb)
+    } catch (err) {
+      console.error(err)
+    }
+  }, [])
+
+  const runOcr = async () => {
+    if (!currentFile) return
+    setOcrState('loading')
+    setOcrProgress(0)
+
+    let imageSource = currentFile
+    try {
+      if (currentFile.type === 'application/pdf') {
+        const buf = await currentFile.arrayBuffer()
+        const canvas = await pdfToCanvas(buf)
+        imageSource = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9))
+      }
 
       const worker = await createWorker('rus+eng', 1, {
         logger: m => {
@@ -124,7 +159,7 @@ export default function DocumentUpload() {
       console.error(err)
       setOcrState('error')
     }
-  }, [])
+  }
 
   const onDrop = useCallback(e => {
     e.preventDefault()
@@ -133,7 +168,7 @@ export default function DocumentUpload() {
     if (file) handleFile(file)
   }, [handleFile])
 
-  const saveAsAnalysis = () => {
+  const saveAsAnalysis = async () => {
     const analyses = getAnalyses()
     const today = new Date().toISOString().slice(0, 10)
     const newEntries = confirmForm
@@ -146,51 +181,64 @@ export default function DocumentUpload() {
         reference: r.reference || r.norm || ''
       }))
     setAnalyses([...analyses, ...newEntries])
-    saveDocument('Анализ')
+    await saveDocument('Анализ')
     alert(`Сохранено ${newEntries.length} показателей в анализы`)
   }
 
-  const saveDocument = (type = docType) => {
-    const docs = getDocuments()
-    const doc = {
-      id: Date.now(),
-      date: new Date().toISOString().slice(0, 10),
-      type,
+  const saveDocument = async (type = docType) => {
+    if (!currentFile) return
+    const id = Date.now()
+    const fileObj = {
+      id,
+      name: currentFile.name,
+      type: currentFile.type,
+      size: currentFile.size,
+      blob: currentFile,
+      uploadedAt: Date.now(),
+      category: 'document',
+      docType: type,
       thumbnail,
       ocrText,
       extracted: confirmForm
     }
-    const updated = [doc, ...docs]
-    setDocuments(updated)
-    setDocumentsState(updated)
+    await saveFile(fileObj)
+    reloadDocs()
     resetUpload()
   }
 
-  const deleteDoc = (id) => {
-    const updated = documents.filter(d => d.id !== id)
-    setDocuments(updated)
-    setDocumentsState(updated)
+  const deleteDoc = async (id) => {
+    await deleteFile(id)
+    reloadDocs()
   }
 
   const resetUpload = () => {
+    setCurrentFile(null)
     setOcrState(null)
     setOcrProgress(0)
     setOcrText('')
     setThumbnail(null)
     setExtracted(null)
     setConfirmForm([])
+    setDocType('Документ')
   }
 
-  const typeColor = {
-    'Анализ': 'bg-violet-100 text-violet-700',
-    'УЗИ': 'bg-blue-100 text-blue-700',
-    'Документ': 'bg-gray-100 text-gray-600'
+  const openDoc = async (doc) => {
+    setViewDoc(doc)
+  }
+
+  const downloadDoc = (doc) => {
+    const url = URL.createObjectURL(doc.blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = doc.name
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   return (
     <div className="space-y-5">
       {/* Upload zone */}
-      {!ocrState && (
+      {!currentFile && (
         <div
           className={`border-2 border-dashed rounded-3xl p-8 text-center cursor-pointer transition-all
             ${dragging
@@ -218,6 +266,49 @@ export default function DocumentUpload() {
         </div>
       )}
 
+      {/* File selected preview */}
+      {currentFile && !ocrState && (
+        <div className="card space-y-4">
+          <div className="flex gap-4 items-start">
+            {thumbnail
+              ? <img src={thumbnail} alt="preview" className="w-24 h-24 rounded-2xl object-cover border-2 border-violet-200 shadow" />
+              : <div className="w-24 h-24 rounded-2xl bg-violet-50 flex items-center justify-center text-4xl">📄</div>
+            }
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-gray-800 truncate">{currentFile.name}</p>
+              <p className="text-sm text-gray-400 mt-1">{formatSize(currentFile.size)}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <select
+                  className="text-xs border border-gray-200 rounded-xl px-2 py-1 text-gray-600"
+                  value={docType}
+                  onChange={e => setDocType(e.target.value)}
+                >
+                  <option>Анализ</option>
+                  <option>УЗИ</option>
+                  <option>Документ</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              className="flex-1 text-sm font-bold py-3 rounded-2xl text-white"
+              style={{ background: 'linear-gradient(135deg,#7c3aed,#ec4899)' }}
+              onClick={runOcr}
+            >
+              🔍 Распознать текст
+            </button>
+            <button
+              className="flex-1 text-sm font-bold py-3 rounded-2xl border-2 border-violet-200 text-violet-700 hover:bg-violet-50 transition-all"
+              onClick={() => saveDocument()}
+            >
+              Сохранить документ
+            </button>
+          </div>
+          <button className="w-full text-xs text-gray-400 underline" onClick={resetUpload}>Отмена</button>
+        </div>
+      )}
+
       {/* OCR Loading */}
       {ocrState === 'loading' && (
         <div className="card text-center py-8">
@@ -233,16 +324,13 @@ export default function DocumentUpload() {
           <div className="mt-4 h-3 bg-gray-100 rounded-full overflow-hidden mx-4">
             <div
               className="h-full rounded-full transition-all duration-300"
-              style={{
-                width: `${ocrProgress}%`,
-                background: 'linear-gradient(90deg,#7c3aed,#ec4899)'
-              }}
+              style={{ width: `${ocrProgress}%`, background: 'linear-gradient(90deg,#7c3aed,#ec4899)' }}
             />
           </div>
         </div>
       )}
 
-      {/* Result */}
+      {/* OCR Result */}
       {ocrState === 'done' && extracted && (
         <div className="space-y-4">
           <div className="flex gap-4 items-start">
@@ -268,7 +356,6 @@ export default function DocumentUpload() {
             </div>
           </div>
 
-          {/* OCR text */}
           <details className="card !p-0 overflow-hidden">
             <summary className="px-4 py-3 cursor-pointer text-sm font-bold text-gray-600 bg-gray-50 rounded-2xl">
               Распознанный текст (развернуть)
@@ -276,7 +363,6 @@ export default function DocumentUpload() {
             <pre className="px-4 py-3 text-xs text-gray-500 overflow-x-auto whitespace-pre-wrap max-h-40">{ocrText || 'Текст не найден'}</pre>
           </details>
 
-          {/* Editable extracted fields */}
           {confirmForm.length > 0 && (
             <div className="card space-y-3">
               <h3 className="font-black text-gray-800">Извлечённые данные</h3>
@@ -321,13 +407,9 @@ export default function DocumentUpload() {
             </div>
           )}
 
-          {/* Action buttons */}
           <div className="flex gap-3">
             {(docType === 'Анализ' || docType === 'УЗИ') && confirmForm.length > 0 && (
-              <button
-                className="btn-primary flex-1 text-sm"
-                onClick={saveAsAnalysis}
-              >
+              <button className="btn-primary flex-1 text-sm" onClick={saveAsAnalysis}>
                 Сохранить в карту
               </button>
             )}
@@ -338,12 +420,7 @@ export default function DocumentUpload() {
               Сохранить документ
             </button>
           </div>
-          <button
-            className="w-full text-xs text-gray-400 underline"
-            onClick={resetUpload}
-          >
-            Отмена
-          </button>
+          <button className="w-full text-xs text-gray-400 underline" onClick={resetUpload}>Отмена</button>
         </div>
       )}
 
@@ -351,76 +428,70 @@ export default function DocumentUpload() {
         <div className="card text-center py-6 border border-red-100">
           <p className="text-3xl mb-2">⚠️</p>
           <p className="font-bold text-red-600">Не удалось распознать документ</p>
-          <button className="mt-3 text-sm text-violet-600 underline" onClick={resetUpload}>Попробовать снова</button>
+          <div className="flex gap-3 mt-3 justify-center">
+            <button className="text-sm text-violet-600 underline" onClick={() => setOcrState(null)}>
+              Сохранить без распознавания
+            </button>
+            <button className="text-sm text-gray-400 underline" onClick={resetUpload}>Отмена</button>
+          </div>
         </div>
       )}
 
       {/* Documents list */}
-      {documents.length > 0 && !ocrState && (
+      {documents.length > 0 && !currentFile && (
         <div className="space-y-3">
           <h3 className="font-black text-gray-800">Сохранённые документы ({documents.length})</h3>
           {documents.map(doc => (
-            <div key={doc.id} className="card flex items-center gap-3">
-              {doc.thumbnail
-                ? <img src={doc.thumbnail} alt="" className="w-14 h-14 rounded-xl object-cover border border-violet-100 cursor-pointer flex-shrink-0"
-                    onClick={() => setViewDoc(doc)} />
-                : <div className="w-14 h-14 rounded-xl bg-violet-50 flex items-center justify-center text-2xl flex-shrink-0 cursor-pointer"
-                    onClick={() => setViewDoc(doc)}>📄</div>
-              }
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-xs font-black px-2 py-0.5 rounded-full ${typeColor[doc.type] || typeColor['Документ']}`}>
-                    {doc.type}
-                  </span>
-                  <span className="text-xs text-gray-400">{doc.date}</span>
+            <div key={doc.id} className="card border border-violet-100">
+              <div className="flex items-center gap-3">
+                {doc.thumbnail
+                  ? <img src={doc.thumbnail} alt="" className="w-14 h-14 rounded-xl object-cover border border-violet-100 flex-shrink-0" />
+                  : <div className="w-14 h-14 rounded-xl bg-violet-50 flex items-center justify-center text-2xl flex-shrink-0">📄</div>
+                }
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-xs font-black px-2 py-0.5 rounded-full ${typeColor[doc.docType] || typeColor['Документ']}`}>
+                      {doc.docType || 'Документ'}
+                    </span>
+                    <span className="text-xs text-gray-400">{new Date(doc.uploadedAt).toLocaleDateString('ru-RU')}</span>
+                  </div>
+                  <p className="text-sm font-medium text-gray-700 mt-1 truncate">{doc.name}</p>
+                  <p className="text-xs text-gray-400">{formatSize(doc.size)}</p>
                 </div>
-                <p className="text-xs text-gray-500 mt-1 truncate">
-                  {doc.extracted?.length > 0
-                    ? `${doc.extracted.length} показателей`
-                    : 'Документ без распознавания'}
-                </p>
+                <button
+                  className="text-gray-300 hover:text-red-400 text-xl font-bold flex-shrink-0"
+                  onClick={() => deleteDoc(doc.id)}
+                >×</button>
               </div>
-              <button
-                className="text-gray-300 hover:text-red-400 text-xl font-bold flex-shrink-0"
-                onClick={() => deleteDoc(doc.id)}
-              >×</button>
+              <div className="flex gap-2 mt-3">
+                <button
+                  className="flex-1 text-xs font-bold py-2 rounded-xl border border-violet-200 text-violet-700 hover:bg-violet-50 transition-all"
+                  onClick={() => openDoc(doc)}
+                >
+                  👁 Открыть
+                </button>
+                <button
+                  className="flex-1 text-xs font-bold py-2 rounded-xl text-white"
+                  style={{ background: 'linear-gradient(135deg,#7c3aed,#ec4899)' }}
+                  onClick={() => downloadDoc(doc)}
+                >
+                  ⬇ Скачать
+                </button>
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* View modal */}
-      {viewDoc && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center"
-          style={{ background: 'rgba(30,10,60,0.6)', backdropFilter: 'blur(4px)' }}
-          onClick={() => setViewDoc(null)}
-        >
-          <div
-            className="bg-white rounded-t-3xl w-full max-w-lg p-6 pb-10 max-h-[90vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-2">
-                <span className={`text-xs font-black px-3 py-1 rounded-full ${typeColor[viewDoc.type] || typeColor['Документ']}`}>
-                  {viewDoc.type}
-                </span>
-                <span className="text-sm text-gray-400">{viewDoc.date}</span>
-              </div>
-              <button onClick={() => setViewDoc(null)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold">×</button>
-            </div>
-            {viewDoc.thumbnail && (
-              <img src={viewDoc.thumbnail} alt="" className="w-full rounded-2xl mb-4 border border-violet-100" />
-            )}
-            {viewDoc.ocrText && (
-              <pre className="text-xs text-gray-500 bg-gray-50 rounded-2xl p-4 whitespace-pre-wrap max-h-60 overflow-y-auto">
-                {viewDoc.ocrText}
-              </pre>
-            )}
-          </div>
+      {documents.length === 0 && !currentFile && (
+        <div className="text-center py-8 text-gray-400">
+          <p className="text-4xl mb-3">📂</p>
+          <p className="font-medium">Нет сохранённых документов</p>
         </div>
       )}
+
+      {/* FileViewer modal */}
+      {viewDoc && <FileViewer file={viewDoc} onClose={() => setViewDoc(null)} />}
     </div>
   )
 }

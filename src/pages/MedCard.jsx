@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { getUser, setUser, getVisits, setVisits, getAnalyses, setAnalyses, getPrescriptions, setPrescriptions } from '../utils/storage'
+import { saveFile, getFilesByAnalysis } from '../utils/fileStorage'
 import BottomNav from '../components/BottomNav'
 import DocumentUpload from '../components/DocumentUpload'
+import FileViewer from '../components/FileViewer'
 
 const TABS = [
   { label: 'Основное', icon: '👤' },
@@ -43,6 +45,42 @@ export default function MedCard() {
   const [visitForm, setVisitForm] = useState({ date: '', bp: '', weight: '', notes: '' })
   const [analysisForm, setAnalysisForm] = useState({ name: '', date: '', result: '', reference: '' })
   const [prescForm, setPrescForm] = useState({ drug: '', schema: '', course: '' })
+
+  // Analysis file attachments
+  const [analysisFiles, setAnalysisFiles] = useState({}) // { [analysisId]: fileObj[] }
+  const [viewFile, setViewFile] = useState(null)
+  const attachInputRefs = useRef({})
+
+  useEffect(() => {
+    // Load file counts for all analyses
+    const loadFiles = async () => {
+      const fileMap = {}
+      for (const a of analyses) {
+        const files = await getFilesByAnalysis(a.id)
+        if (files.length > 0) fileMap[a.id] = files
+      }
+      setAnalysisFiles(fileMap)
+    }
+    if (analyses.length > 0) loadFiles()
+  }, [analyses.length])
+
+  const attachFileToAnalysis = async (analysisId, file) => {
+    if (!file) return
+    const id = Date.now()
+    const fileObj = {
+      id,
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      blob: file,
+      uploadedAt: Date.now(),
+      category: 'analysis',
+      analysisId
+    }
+    await saveFile(fileObj)
+    const updated = { ...analysisFiles, [analysisId]: [...(analysisFiles[analysisId] || []), fileObj] }
+    setAnalysisFiles(updated)
+  }
 
   const saveUser = () => { setUser(user); setEditing(false) }
   const addVisit = () => {
@@ -183,6 +221,32 @@ export default function MedCard() {
                   </div>
                   <p className="text-sm text-gray-700 mt-2">Результат: <span className="font-bold text-primary-700">{a.result}</span></p>
                   {a.reference && <p className="text-xs text-gray-400 mt-1">Норма: {a.reference}</p>}
+                  <div className="flex items-center gap-2 mt-3">
+                    <button
+                      className="text-xs font-bold px-3 py-1.5 rounded-xl border border-violet-200 text-violet-600 hover:bg-violet-50 transition-all"
+                      onClick={() => {
+                        if (!attachInputRefs.current[a.id]) {
+                          const input = document.createElement('input')
+                          input.type = 'file'
+                          input.accept = 'image/*,.pdf'
+                          input.onchange = e => attachFileToAnalysis(a.id, e.target.files[0])
+                          attachInputRefs.current[a.id] = input
+                        }
+                        attachInputRefs.current[a.id].click()
+                      }}
+                    >
+                      📎 Прикрепить файл
+                    </button>
+                    {analysisFiles[a.id]?.length > 0 && (
+                      <button
+                        className="text-xs font-bold px-3 py-1.5 rounded-xl text-white"
+                        style={{ background: 'linear-gradient(135deg,#7c3aed,#ec4899)' }}
+                        onClick={() => setViewFile(analysisFiles[a.id][0])}
+                      >
+                        📎 {analysisFiles[a.id].length} файл{analysisFiles[a.id].length > 1 ? 'а' : ''}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))
             }
@@ -261,6 +325,8 @@ export default function MedCard() {
           </div>
         </Modal>
       )}
+
+      {viewFile && <FileViewer file={viewFile} onClose={() => setViewFile(null)} />}
 
       <BottomNav />
     </div>
