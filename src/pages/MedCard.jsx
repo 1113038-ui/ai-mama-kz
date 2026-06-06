@@ -130,85 +130,89 @@ export default function MedCard() {
       <div className="max-w-lg mx-auto px-5 py-5">
         {/* ОСНОВНОЕ */}
         {tab === 0 && (
-          <div className="card space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-black text-gray-900">Личные данные</h2>
-              {!editing
-                ? <button onClick={() => setEditing(true)}
-                    className="text-xs font-bold text-primary-600 bg-primary-50 px-3 py-1.5 rounded-xl">Изменить</button>
-                : <button onClick={saveUser}
-                    className="text-xs font-bold text-green-700 bg-green-50 px-3 py-1.5 rounded-xl">Сохранить</button>
-              }
-            </div>
-            {[
-              { label: 'ФИО', key: 'fullName', type: 'text' },
-              { label: 'ИИН', key: 'iin', type: 'text' },
-              { label: 'Дата рождения', key: 'birthDate', type: 'date' },
-              { label: 'Телефон', key: 'phone', type: 'text' },
-              { label: 'Город', key: 'city', type: 'text' },
-              { label: 'Срок беременности (нед.)', key: 'weeks', type: 'number' },
-            ].map(f => (
-              <div key={f.key}>
-                <label className="label">{f.label}</label>
-                {editing
-                  ? <input type={f.type} className="input-field"
-                      value={user[f.key] || ''}
-                      onChange={e => setUserState(u => ({ ...u, [f.key]: e.target.value }))} />
-                  : <div className="py-3 px-4 bg-primary-50 rounded-2xl text-gray-800 font-medium">
-                      {user[f.key] || <span className="text-gray-300">Не заполнено</span>}
-                    </div>
-                }
+          <div className="space-y-4">
+
+            {/* Блок беременности — всегда открыт */}
+            <div className="card-gradient space-y-4">
+              <h2 className="font-black text-white text-lg">Беременность 🤰</h2>
+
+              <div>
+                <label className="block text-sm font-semibold text-purple-200 mb-2">Первый день последних месячных 📅</label>
+                <input type="date"
+                  className="w-full rounded-2xl px-4 py-3.5 font-medium border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
+                  style={{ background: 'rgba(255,255,255,0.2)', color: 'white', colorScheme: 'dark' }}
+                  value={user.lastPeriod || ''}
+                  onChange={e => {
+                    const lmp = new Date(e.target.value)
+                    const pdr = new Date(lmp.getTime() + 280 * 86400000)
+                    const weeks = Math.max(0, Math.round((Date.now() - lmp.getTime()) / (7 * 86400000)))
+                    const updated = { ...user, lastPeriod: e.target.value, pdr: pdr.toISOString(), weeks }
+                    setUserState(updated); setUser(updated)
+                  }} />
+                {user.pdr && (
+                  <p className="text-white/70 text-xs mt-2 font-medium">
+                    📅 ПДР: <span className="text-white font-bold">{new Date(user.pdr).toLocaleDateString('ru-RU')}</span>
+                    &nbsp;· Срок: <span className="text-white font-bold">{user.weeks} нед.</span>
+                  </p>
+                )}
               </div>
-            ))}
 
-            {/* Дата первого дня последних месячных */}
-            <div>
-              <label className="label">Дата первого дня последних месячных 📅</label>
-              {editing
-                ? <input type="date" className="input-field"
-                    value={user.lastPeriod || ''}
+              <div>
+                <label className="block text-sm font-semibold text-purple-200 mb-2">Вес малыша ⚖️</label>
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 rounded-2xl px-4 py-3.5 font-medium border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
+                    style={{ background: 'rgba(255,255,255,0.2)', color: 'white' }}
+                    placeholder={getBabyWeightByWeek(user.weeks || 0) + ' — по сроку'}
+                    value={user.babyWeightManual || ''}
                     onChange={e => {
-                      const lmp = new Date(e.target.value)
-                      const pdr = new Date(lmp.getTime() + 280 * 86400000)
-                      const weeks = Math.round((Date.now() - lmp.getTime()) / (7 * 86400000))
-                      setUserState(u => ({ ...u, lastPeriod: e.target.value, pdr: pdr.toISOString(), weeks: Math.max(0, weeks) }))
+                      const updated = { ...user, babyWeightManual: e.target.value }
+                      setUserState(updated); setUser(updated)
                     }} />
-                : <div className="py-3 px-4 bg-primary-50 rounded-2xl text-gray-800 font-medium">
-                    {user.lastPeriod
-                      ? <span>{new Date(user.lastPeriod).toLocaleDateString('ru-RU')}
-                          <span className="text-primary-400 text-xs ml-2">→ ПДР: {user.pdr ? new Date(user.pdr).toLocaleDateString('ru-RU') : '—'}</span>
-                        </span>
-                      : <span className="text-gray-300">Не заполнено</span>}
-                  </div>
-              }
-            </div>
-
-            {/* Вес малыша */}
-            <div>
-              <label className="label">Вес малыша 👶</label>
-              {editing
-                ? <div className="flex gap-2 items-center">
-                    <input className="input-field flex-1" placeholder="например: 1.5кг или 800г"
-                      value={user.babyWeightManual || ''}
-                      onChange={e => setUserState(u => ({ ...u, babyWeightManual: e.target.value }))} />
+                  {user.babyWeightManual && (
                     <button
-                      className="text-xs text-primary-500 bg-primary-50 px-3 py-3 rounded-2xl font-bold whitespace-nowrap"
-                      onClick={() => setUserState(u => ({ ...u, babyWeightManual: '' }))}>
+                      className="border border-white/30 text-white text-xs font-bold px-3 rounded-2xl"
+                      style={{ background: 'rgba(255,255,255,0.15)' }}
+                      onClick={() => { const u2 = { ...user, babyWeightManual: '' }; setUserState(u2); setUser(u2) }}>
                       Авто
                     </button>
-                  </div>
-                : <div className="py-3 px-4 bg-primary-50 rounded-2xl text-gray-800 font-medium flex items-center gap-2">
-                    <span className="text-2xl">⚖️</span>
-                    <div>
-                      <span className="font-bold text-primary-700">
-                        {user.babyWeightManual || getBabyWeightByWeek(user.weeks || 0)}
-                      </span>
-                      {user.babyWeightManual && <span className="text-xs text-gray-400 ml-2">(введено вручную)</span>}
-                      {!user.babyWeightManual && <span className="text-xs text-gray-400 ml-2">(по сроку {user.weeks} нед.)</span>}
-                    </div>
-                  </div>
-              }
+                  )}
+                </div>
+                <p className="text-white/50 text-xs mt-1.5">Пустое поле — вес по сроку автоматически</p>
+              </div>
             </div>
+
+            {/* Личные данные */}
+            <div className="card space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-black text-gray-900">Личные данные</h2>
+                {!editing
+                  ? <button onClick={() => setEditing(true)}
+                      className="text-xs font-bold text-primary-600 bg-primary-50 px-3 py-1.5 rounded-xl">Изменить</button>
+                  : <button onClick={saveUser}
+                      className="text-xs font-bold text-green-700 bg-green-50 px-3 py-1.5 rounded-xl">Сохранить ✓</button>
+                }
+              </div>
+              {[
+                { label: 'ФИО', key: 'fullName', type: 'text' },
+                { label: 'ИИН', key: 'iin', type: 'text' },
+                { label: 'Дата рождения', key: 'birthDate', type: 'date' },
+                { label: 'Телефон', key: 'phone', type: 'text' },
+                { label: 'Город', key: 'city', type: 'text' },
+                { label: 'Срок беременности (нед.)', key: 'weeks', type: 'number' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="label">{f.label}</label>
+                  {editing
+                    ? <input type={f.type} className="input-field"
+                        value={user[f.key] || ''}
+                        onChange={e => setUserState(u => ({ ...u, [f.key]: e.target.value }))} />
+                    : <div className="py-3 px-4 bg-primary-50 rounded-2xl text-gray-800 font-medium">
+                        {user[f.key] || <span className="text-gray-300">Не заполнено</span>}
+                      </div>
+                  }
+                </div>
+              ))}
 
             {/* Женская консультация — dropdown с поиском */}
             <div>
@@ -249,6 +253,7 @@ export default function MedCard() {
                     {empLabel[user.employment] || <span className="text-gray-300">Не заполнено</span>}
                   </div>
               }
+            </div>
             </div>
           </div>
         )}
