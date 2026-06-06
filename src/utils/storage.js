@@ -28,6 +28,11 @@ export const getPrescriptions = () => {
 }
 export const setPrescriptions = (data) => localStorage.setItem('aiMamaPrescriptions', JSON.stringify(data))
 
+export const getDocuments = () => {
+  try { return JSON.parse(localStorage.getItem('aiMamaDocuments') || '[]') } catch { return [] }
+}
+export const setDocuments = (d) => localStorage.setItem('aiMamaDocuments', JSON.stringify(d))
+
 export const getBabyWeightByWeek = (week) => {
   const weights = {
     8: '1г', 10: '4г', 12: '14г', 14: '43г', 16: '100г', 18: '190г',

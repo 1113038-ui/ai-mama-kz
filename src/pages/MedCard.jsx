@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { getUser, setUser, getVisits, setVisits, getAnalyses, setAnalyses, getPrescriptions, setPrescriptions } from '../utils/storage'
 import BottomNav from '../components/BottomNav'
+import DocumentUpload from '../components/DocumentUpload'
 
 const TABS = [
   { label: 'Основное', icon: '👤' },
   { label: 'Визиты', icon: '🏥' },
   { label: 'Анализы', icon: '🔬' },
   { label: 'Назначения', icon: '📋' },
+  { label: 'Документы', icon: '📎' },
 ]
 
 function Modal({ title, onClose, children }) {
@@ -186,6 +188,9 @@ export default function MedCard() {
             }
           </div>
         )}
+
+        {/* ДОКУМЕНТЫ */}
+        {tab === 4 && <DocumentUpload />}
 
         {/* НАЗНАЧЕНИЯ */}
         {tab === 3 && (
