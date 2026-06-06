@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { setUser } from '../utils/storage'
+import ClinicDropdown from '../components/ClinicDropdown'
 
 const STEPS = 3
 
@@ -155,9 +156,8 @@ export default function Onboarding() {
               {errors.city && <p className="text-red-500 text-xs mt-1.5 font-medium">{errors.city}</p>}
             </div>
             <div>
-              <label className="label">Женская консультация <span className="text-primary-300 font-normal">(необязательно)</span></label>
-              <input className="input-field" placeholder="ЖК №1, ул. Примерная"
-                value={form.clinic} onChange={e => update('clinic', e.target.value)} />
+              <label className="label">Женская консультация / Поликлиника 🏥 <span className="text-primary-300 font-normal">(необязательно)</span></label>
+              <ClinicDropdown value={form.clinic} onChange={v => update('clinic', v)} />
             </div>
           </div>
         )}

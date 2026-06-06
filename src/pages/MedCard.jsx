@@ -4,6 +4,7 @@ import { saveFile, getFilesByAnalysis } from '../utils/fileStorage'
 import BottomNav from '../components/BottomNav'
 import DocumentUpload from '../components/DocumentUpload'
 import FileViewer from '../components/FileViewer'
+import ClinicDropdown, { ASTANA_CLINICS } from '../components/ClinicDropdown'
 
 const TABS = [
   { label: 'Основное', icon: '👤' },
@@ -32,6 +33,7 @@ function Modal({ title, onClose, children }) {
 }
 
 const empLabel = { official: 'Официально трудоустроена', ip: 'ИП', selfemployed: 'Самозанятая', none: 'Не работаю' }
+
 
 export default function MedCard() {
   const [tab, setTab] = useState(0)
@@ -144,7 +146,6 @@ export default function MedCard() {
               { label: 'Дата рождения', key: 'birthDate', type: 'date' },
               { label: 'Телефон', key: 'phone', type: 'text' },
               { label: 'Город', key: 'city', type: 'text' },
-              { label: 'Женская консультация', key: 'clinic', type: 'text' },
               { label: 'Срок беременности (нед.)', key: 'weeks', type: 'number' },
             ].map(f => (
               <div key={f.key}>
@@ -159,6 +160,32 @@ export default function MedCard() {
                 }
               </div>
             ))}
+
+            {/* Женская консультация — dropdown с поиском */}
+            <div>
+              <label className="label">Женская консультация / Поликлиника 🏥</label>
+              {editing
+                ? <ClinicDropdown
+                    value={user.clinic || ''}
+                    onChange={v => setUserState(u => ({ ...u, clinic: v }))}
+                  />
+                : <div className="py-3 px-4 bg-primary-50 rounded-2xl">
+                    {user.clinic
+                      ? (() => {
+                          const c = ASTANA_CLINICS.find(x => x.name === user.clinic)
+                          return c
+                            ? <div>
+                                <p className="font-bold text-gray-800 text-sm">{c.name}</p>
+                                <p className="text-xs text-primary-400 mt-0.5">📍 {c.address}</p>
+                                {c.phone && <p className="text-xs text-primary-400">📞 {c.phone}</p>}
+                              </div>
+                            : <p className="text-gray-800 font-medium">{user.clinic}</p>
+                        })()
+                      : <span className="text-gray-300">Не выбрано</span>
+                    }
+                  </div>
+              }
+            </div>
             <div>
               <label className="label">Статус занятости</label>
               {editing
