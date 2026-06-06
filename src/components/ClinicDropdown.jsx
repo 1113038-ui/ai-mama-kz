@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 export const ASTANA_CLINICS = [
   { name: 'Городская поликлиника №1', address: 'ул. Сейфуллина, 28', phone: '32-36-40', district: 'Алматинский' },
@@ -21,69 +21,96 @@ export const ASTANA_CLINICS = [
 ]
 
 export default function ClinicDropdown({ value, onChange }) {
-  const [search, setSearch] = useState('')
+  const [inputVal, setInputVal] = useState(value || '')
   const [open, setOpen] = useState(false)
+  const wrapRef = useRef(null)
+
+  // sync if parent changes value
+  useEffect(() => { setInputVal(value || '') }, [value])
+
+  // close on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   const filtered = ASTANA_CLINICS.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.address.toLowerCase().includes(search.toLowerCase()) ||
-    c.district.toLowerCase().includes(search.toLowerCase())
+    inputVal.length === 0 ||
+    c.name.toLowerCase().includes(inputVal.toLowerCase()) ||
+    c.address.toLowerCase().includes(inputVal.toLowerCase()) ||
+    c.district.toLowerCase().includes(inputVal.toLowerCase())
   )
 
   const selected = ASTANA_CLINICS.find(c => c.name === value)
 
+  const handleInput = (e) => {
+    setInputVal(e.target.value)
+    onChange(e.target.value)
+    setOpen(true)
+  }
+
+  const handleSelect = (c) => {
+    setInputVal(c.name)
+    onChange(c.name)
+    setOpen(false)
+  }
+
   return (
-    <div className="relative">
-      <div
-        className="input-field flex items-center justify-between cursor-pointer"
-        onClick={() => setOpen(o => !o)}
-      >
-        {selected
-          ? <div className="flex-1 min-w-0">
-              <p className="font-semibold text-gray-800 text-sm truncate">{selected.name}</p>
-              <p className="text-xs text-primary-400 truncate">{selected.address}</p>
-            </div>
-          : <span className="text-primary-300 text-sm">{value || 'Выберите или введите название'}</span>
-        }
-        <span className="ml-2 text-primary-400 flex-none">{open ? '▲' : '▼'}</span>
+    <div className="relative" ref={wrapRef}>
+      {/* Input field — type directly */}
+      <div className="relative">
+        <input
+          className="input-field pr-10"
+          placeholder="Введите цифру, букву или район..."
+          value={inputVal}
+          onChange={handleInput}
+          onFocus={() => setOpen(true)}
+        />
+        <button
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-400 text-sm"
+          onClick={() => setOpen(o => !o)}
+          tabIndex={-1}
+        >{open ? '▲' : '▼'}</button>
       </div>
 
+      {/* Selected clinic info */}
+      {selected && selected.name === value && (
+        <div className="mt-1.5 px-3 py-2 rounded-xl bg-primary-50 flex items-center gap-2">
+          <span className="text-primary-500 text-sm">📍</span>
+          <div>
+            <p className="text-xs text-gray-500">{selected.address}</p>
+            {selected.phone && <p className="text-xs text-primary-400">📞 {selected.phone}</p>}
+          </div>
+          <span className="ml-auto text-[10px] font-bold text-primary-500 bg-white px-2 py-0.5 rounded-lg">{selected.district}</span>
+        </div>
+      )}
+
+      {/* Dropdown list */}
       {open && (
         <div className="absolute z-30 left-0 right-0 mt-1 bg-white rounded-2xl overflow-hidden"
-          style={{ maxHeight: 320, boxShadow: '0 20px 60px rgba(124,58,237,0.25)', border: '1px solid rgba(196,181,253,0.4)' }}>
-          <div className="p-3 border-b border-primary-50">
-            <input
-              autoFocus
-              className="w-full bg-primary-50 rounded-xl px-3 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-primary-300 placeholder-primary-300"
-              placeholder="🔍 Поиск по названию, адресу, району..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              onClick={e => e.stopPropagation()}
-            />
-          </div>
-          <div className="overflow-y-auto" style={{ maxHeight: 240 }}>
-            {search && !filtered.find(c => c.name.toLowerCase() === search.toLowerCase()) && (
-              <button
-                className="w-full text-left px-4 py-3 hover:bg-primary-50 border-b border-primary-50"
-                onClick={() => { onChange(search); setOpen(false); setSearch('') }}>
-                <p className="text-sm font-semibold text-primary-600">✏️ Ввести вручную: «{search}»</p>
-              </button>
-            )}
+          style={{ maxHeight: 280, boxShadow: '0 20px 60px rgba(124,58,237,0.25)', border: '1px solid rgba(196,181,253,0.4)' }}>
+          <div className="overflow-y-auto" style={{ maxHeight: 280 }}>
             {filtered.length === 0 && (
-              <p className="text-center text-gray-400 py-4 text-sm">Ничего не найдено</p>
+              <div className="text-center py-4">
+                <p className="text-gray-400 text-sm">Не найдено в списке</p>
+                <p className="text-primary-400 text-xs mt-1">Ваш текст сохранится как введено</p>
+              </div>
             )}
             {filtered.map(c => (
               <button key={c.name}
                 className={`w-full text-left px-4 py-3 hover:bg-primary-50 transition-colors border-b border-primary-50 last:border-0 ${value === c.name ? 'bg-primary-50' : ''}`}
-                onClick={() => { onChange(c.name); setOpen(false); setSearch('') }}>
+                onMouseDown={e => { e.preventDefault(); handleSelect(c) }}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-gray-800">{c.name}</p>
                     <p className="text-xs text-gray-400 mt-0.5">📍 {c.address}</p>
+                    {c.phone && <p className="text-xs text-primary-400">📞 {c.phone}</p>}
                   </div>
                   <span className="text-[10px] font-bold text-primary-500 bg-primary-50 px-2 py-0.5 rounded-lg flex-none mt-0.5">{c.district}</span>
                 </div>
-                {c.phone && <p className="text-xs text-primary-400 mt-0.5">📞 {c.phone}</p>}
               </button>
             ))}
           </div>

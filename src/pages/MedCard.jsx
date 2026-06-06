@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { getUser, setUser, getVisits, setVisits, getAnalyses, setAnalyses, getPrescriptions, setPrescriptions } from '../utils/storage'
+import { getUser, setUser, getVisits, setVisits, getAnalyses, setAnalyses, getPrescriptions, setPrescriptions, getBabyWeightByWeek } from '../utils/storage'
 import { saveFile, getFilesByAnalysis } from '../utils/fileStorage'
 import BottomNav from '../components/BottomNav'
 import DocumentUpload from '../components/DocumentUpload'
@@ -160,6 +160,55 @@ export default function MedCard() {
                 }
               </div>
             ))}
+
+            {/* Дата первого дня последних месячных */}
+            <div>
+              <label className="label">Дата первого дня последних месячных 📅</label>
+              {editing
+                ? <input type="date" className="input-field"
+                    value={user.lastPeriod || ''}
+                    onChange={e => {
+                      const lmp = new Date(e.target.value)
+                      const pdr = new Date(lmp.getTime() + 280 * 86400000)
+                      const weeks = Math.round((Date.now() - lmp.getTime()) / (7 * 86400000))
+                      setUserState(u => ({ ...u, lastPeriod: e.target.value, pdr: pdr.toISOString(), weeks: Math.max(0, weeks) }))
+                    }} />
+                : <div className="py-3 px-4 bg-primary-50 rounded-2xl text-gray-800 font-medium">
+                    {user.lastPeriod
+                      ? <span>{new Date(user.lastPeriod).toLocaleDateString('ru-RU')}
+                          <span className="text-primary-400 text-xs ml-2">→ ПДР: {user.pdr ? new Date(user.pdr).toLocaleDateString('ru-RU') : '—'}</span>
+                        </span>
+                      : <span className="text-gray-300">Не заполнено</span>}
+                  </div>
+              }
+            </div>
+
+            {/* Вес малыша */}
+            <div>
+              <label className="label">Вес малыша 👶</label>
+              {editing
+                ? <div className="flex gap-2 items-center">
+                    <input className="input-field flex-1" placeholder="например: 1.5кг или 800г"
+                      value={user.babyWeightManual || ''}
+                      onChange={e => setUserState(u => ({ ...u, babyWeightManual: e.target.value }))} />
+                    <button
+                      className="text-xs text-primary-500 bg-primary-50 px-3 py-3 rounded-2xl font-bold whitespace-nowrap"
+                      onClick={() => setUserState(u => ({ ...u, babyWeightManual: '' }))}>
+                      Авто
+                    </button>
+                  </div>
+                : <div className="py-3 px-4 bg-primary-50 rounded-2xl text-gray-800 font-medium flex items-center gap-2">
+                    <span className="text-2xl">⚖️</span>
+                    <div>
+                      <span className="font-bold text-primary-700">
+                        {user.babyWeightManual || getBabyWeightByWeek(user.weeks || 0)}
+                      </span>
+                      {user.babyWeightManual && <span className="text-xs text-gray-400 ml-2">(введено вручную)</span>}
+                      {!user.babyWeightManual && <span className="text-xs text-gray-400 ml-2">(по сроку {user.weeks} нед.)</span>}
+                    </div>
+                  </div>
+              }
+            </div>
 
             {/* Женская консультация — dropdown с поиском */}
             <div>

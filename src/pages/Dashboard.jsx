@@ -32,7 +32,7 @@ export default function Dashboard() {
   const daysLeft = pdr ? Math.max(0, Math.round((pdr - Date.now()) / 864e5)) : '—'
   const matLeaveStart = pdr ? new Date(pdr.getTime() - 70 * 864e5) : null
   const daysToMatLeave = matLeaveStart ? Math.max(0, Math.round((matLeaveStart - Date.now()) / 864e5)) : '—'
-  const babyWeight = getBabyWeightByWeek(week)
+  const babyWeight = user.babyWeightManual || getBabyWeightByWeek(week)
 
   const today = new Date().toISOString().split('T')[0]
   const meds = getMedications()
