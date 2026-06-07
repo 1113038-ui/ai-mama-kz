@@ -158,7 +158,7 @@ export default function MedCard() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-purple-200 mb-2">Вес малыша ⚖️</label>
+                <label className="block text-sm font-semibold text-purple-200 mb-2">Вес малыша ⚖️ <span className="font-normal text-white/50">(укажите в граммах, например: 800г или 1.5кг)</span></label>
                 <div className="flex gap-2">
                   <input
                     className="flex-1 rounded-2xl px-4 py-3.5 font-medium border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
