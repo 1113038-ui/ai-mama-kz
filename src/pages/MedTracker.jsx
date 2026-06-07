@@ -2,6 +2,150 @@ import { useState, useEffect } from 'react'
 import { getMedications, setMedications, getMedLogs, setMedLogs } from '../utils/storage'
 import BottomNav from '../components/BottomNav'
 
+const PRESET_MEDS = [
+  // Витамины
+  { name: 'Фолиевая кислота', icon: '🟡', category: 'Витамины', dose: '400 мкг', time: '09:00', duration: '270' },
+  { name: 'Витамин D3', icon: '☀️', category: 'Витамины', dose: '1000–2000 МЕ', time: '09:00', duration: '270' },
+  { name: 'Витамин С', icon: '🍊', category: 'Витамины', dose: '500 мг', time: '09:00', duration: '90' },
+  { name: 'Витамин Е', icon: '🌿', category: 'Витамины', dose: '200 МЕ', time: '09:00', duration: '90' },
+  { name: 'Витамин B6 (пиридоксин)', icon: '🔵', category: 'Витамины', dose: '10 мг', time: '09:00', duration: '30' },
+  { name: 'Витамин B12', icon: '💜', category: 'Витамины', dose: '500 мкг', time: '09:00', duration: '30' },
+  { name: 'Элевит Пронаталь', icon: '💊', category: 'Комплексы', dose: '1 таблетка', time: '09:00', duration: '270' },
+  { name: 'Витрум Пренатал', icon: '💊', category: 'Комплексы', dose: '1 таблетка', time: '09:00', duration: '270' },
+  { name: 'Фемибион 1', icon: '💊', category: 'Комплексы', dose: '1 таблетка', time: '09:00', duration: '90' },
+  { name: 'Фемибион 2', icon: '💊', category: 'Комплексы', dose: '1 таблетка + капсула', time: '09:00', duration: '180' },
+  { name: 'Прегнавит', icon: '💊', category: 'Комплексы', dose: '1 капсула', time: '09:00', duration: '270' },
+  // Железо
+  { name: 'Актиферрин', icon: '🔴', category: 'Железо', dose: '1 капсула', time: '10:00', duration: '60' },
+  { name: 'Тотема', icon: '🔴', category: 'Железо', dose: '1 ампула', time: '10:00', duration: '60' },
+  { name: 'Феррум Лек', icon: '🔴', category: 'Железо', dose: '1 таблетка', time: '10:00', duration: '60' },
+  { name: 'Мальтофер', icon: '🔴', category: 'Железо', dose: '1 таблетка', time: '10:00', duration: '60' },
+  { name: 'Сорбифер Дурулес', icon: '🔴', category: 'Железо', dose: '1 таблетка', time: '10:00', duration: '60' },
+  // Магний и кальций
+  { name: 'Магне B6', icon: '🟢', category: 'Магний/Кальций', dose: '2 таблетки', time: '20:00', duration: '30' },
+  { name: 'Магнелис B6', icon: '🟢', category: 'Магний/Кальций', dose: '2 таблетки', time: '20:00', duration: '30' },
+  { name: 'Кальций Д3 Никомед', icon: '🟤', category: 'Магний/Кальций', dose: '1 таблетка', time: '21:00', duration: '60' },
+  { name: 'Кальцемин', icon: '🟤', category: 'Магний/Кальций', dose: '1 таблетка', time: '21:00', duration: '60' },
+  // Йод
+  { name: 'Йодомарин 200', icon: '🔷', category: 'Йод', dose: '1 таблетка', time: '09:00', duration: '270' },
+  { name: 'Йод-Актив', icon: '🔷', category: 'Йод', dose: '1 таблетка', time: '09:00', duration: '270' },
+  // Омега
+  { name: 'Омега-3', icon: '🐟', category: 'Омега-3', dose: '1 капсула', time: '12:00', duration: '90' },
+  { name: 'Омегамама', icon: '🐟', category: 'Омега-3', dose: '1 капсула', time: '12:00', duration: '90' },
+  // Прочее
+  { name: 'Утрожестан', icon: '💛', category: 'Гормональные', dose: '200 мг', time: '22:00', duration: '84' },
+  { name: 'Дюфастон', icon: '💛', category: 'Гормональные', dose: '10 мг', time: '09:00', duration: '84' },
+  { name: 'Но-шпа', icon: '⚪', category: 'Прочее', dose: '1 таблетка', time: '09:00', duration: '7' },
+  { name: 'Папаверин (свечи)', icon: '⚪', category: 'Прочее', dose: '1 свеча', time: '22:00', duration: '10' },
+]
+
+const CATEGORIES = [...new Set(PRESET_MEDS.map(m => m.category))]
+
+function AddMedForm({ form, setForm, onSave }) {
+  const [search, setSearch] = useState('')
+  const [activeCategory, setActiveCategory] = useState('Все')
+  const [showSearch, setShowSearch] = useState(true)
+
+  const filtered = PRESET_MEDS.filter(m => {
+    const matchCat = activeCategory === 'Все' || m.category === activeCategory
+    const matchSearch = !search || m.name.toLowerCase().includes(search.toLowerCase())
+    return matchCat && matchSearch
+  })
+
+  const selectPreset = (preset) => {
+    setForm(f => ({ ...f, name: preset.name, time: preset.time, duration: preset.duration }))
+    setShowSearch(false)
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Поле названия с поиском */}
+      <div>
+        <label className="label">Название препарата</label>
+        <input
+          className="input-field"
+          placeholder="Введите или выберите из списка ниже..."
+          value={form.name}
+          onChange={e => { setForm(f => ({ ...f, name: e.target.value })); setSearch(e.target.value); setShowSearch(true) }}
+          onFocus={() => setShowSearch(true)}
+        />
+      </div>
+
+      {/* Быстрый выбор */}
+      {showSearch && (
+        <div>
+          <p className="text-xs font-bold text-primary-500 mb-2">Выбрать из списка:</p>
+
+          {/* Категории */}
+          <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
+            {['Все', ...CATEGORIES].map(cat => (
+              <button key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`text-xs font-bold px-3 py-1.5 rounded-xl whitespace-nowrap transition-all ${
+                  activeCategory === cat
+                    ? 'text-white'
+                    : 'bg-primary-50 text-primary-500'
+                }`}
+                style={activeCategory === cat ? { background: 'linear-gradient(135deg,#7c3aed,#ec4899)' } : {}}>
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* Список препаратов */}
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            {filtered.map(preset => (
+              <button key={preset.name}
+                onClick={() => selectPreset(preset)}
+                className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all border ${
+                  form.name === preset.name
+                    ? 'border-primary-300 bg-primary-50'
+                    : 'border-transparent bg-gray-50 hover:bg-primary-50'
+                }`}>
+                <span className="text-xl flex-none">{preset.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-800 truncate">{preset.name}</p>
+                  <p className="text-xs text-gray-400">{preset.dose} · {preset.category}</p>
+                </div>
+                {form.name === preset.name && <span className="text-primary-500 text-lg flex-none">✓</span>}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 mt-3">
+            <div className="flex-1 h-px bg-gray-100" />
+            <span className="text-xs text-gray-400">или введите своё</span>
+            <div className="flex-1 h-px bg-gray-100" />
+          </div>
+        </div>
+      )}
+
+      {/* Детали */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label">Время приёма</label>
+          <input type="time" className="input-field" value={form.time}
+            onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
+        </div>
+        <div>
+          <label className="label">Курс (дней)</label>
+          <input type="number" className="input-field" min={1} value={form.duration}
+            onChange={e => setForm(f => ({ ...f, duration: e.target.value }))} />
+        </div>
+      </div>
+      <div>
+        <label className="label">Дата начала</label>
+        <input type="date" className="input-field" value={form.startDate}
+          onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
+      </div>
+
+      <button className="btn-primary" onClick={onSave} disabled={!form.name.trim()}>
+        Сохранить 💊
+      </button>
+    </div>
+  )
+}
+
 function Modal({ title, onClose, children }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center"
@@ -232,30 +376,8 @@ export default function MedTracker() {
       </div>
 
       {showModal && (
-        <Modal title="Добавить препарат" onClose={() => setShowModal(false)}>
-          <div className="space-y-4">
-            <div>
-              <label className="label">Название препарата</label>
-              <input className="input-field" placeholder="Фолиевая кислота" value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Время приёма</label>
-              <input type="time" className="input-field" value={form.time}
-                onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Курс (дней)</label>
-              <input type="number" className="input-field" min={1} value={form.duration}
-                onChange={e => setForm(f => ({ ...f, duration: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Дата начала</label>
-              <input type="date" className="input-field" value={form.startDate}
-                onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} />
-            </div>
-            <button className="btn-primary" onClick={addMed}>Сохранить 💊</button>
-          </div>
+        <Modal title="Добавить препарат 💊" onClose={() => setShowModal(false)}>
+          <AddMedForm form={form} setForm={setForm} onSave={addMed} />
         </Modal>
       )}
 
